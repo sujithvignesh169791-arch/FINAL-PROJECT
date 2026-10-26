@@ -1,0 +1,34 @@
+[
+  {
+    "clause_id": "RC-001",
+    "category": "Liability & Indemnity",
+    "severity": "Critical",
+    "text": "Vendor agrees to defend, indemnify, and hold harmless Customer from any claims, damages, liabilities, and expenses arising out of any breach, without limitation or cap on liability.",
+    "risk_factors": ["Uncapped liability exposure", "Overly broad indemnity trigger covering any breach"],
+    "recommendation": "Insert a 12-month trailing fee liability cap and restrict indemnity to gross negligence or intellectual property infringement."
+  },
+  {
+    "clause_id": "RC-002",
+    "category": "Termination",
+    "severity": "Warning",
+    "text": "Customer reserves the right to terminate this agreement immediately upon notice without cause, without obligation to compensate Provider for completed work in progress.",
+    "risk_factors": ["Immediate termination without cure period", "Forfeiture of fees for work already performed"],
+    "recommendation": "Require 30 days prior written notice and ensure pro-rata payment for services delivered up to effective termination date."
+  },
+  {
+    "clause_id": "RC-003",
+    "category": "Restrictive Covenant",
+    "severity": "Critical",
+    "text": "Consultant agrees not to provide software engineering or consulting services to any entity worldwide for a duration of 36 months following termination.",
+    "risk_factors": ["Excessive 3-year restrictive period", "Worldwide geographic scope is judicially unenforceable"],
+    "recommendation": "Limit duration to 6-12 months and restrict geographic scope to specific defined direct competitors."
+  },
+  {
+    "clause_id": "RC-004",
+    "category": "Payment",
+    "severity": "Standard",
+    "text": "All invoices are due Net 30 days. Disputed charges must be identified in writing within 15 days of invoice receipt.",
+    "risk_factors": ["Standard commercial terms with reasonable dispute window"],
+    "recommendation": "Standard balanced commercial clause."
+  }
+]

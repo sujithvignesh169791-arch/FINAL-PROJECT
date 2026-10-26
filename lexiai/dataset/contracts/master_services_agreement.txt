@@ -1,0 +1,27 @@
+MASTER SERVICES AGREEMENT
+
+This Master Services Agreement ("Agreement") is dated as of October 24, 2026, by and between Nexus Cloud Systems Inc., a Delaware corporation having its principal office at 500 Silicon Way, San Francisco, CA ("Provider"), and Global Enterprise Logistics Corp., a New York corporation having its principal office at 100 Manhattan Plaza, New York, NY ("Customer").
+
+1. SERVICES AND WORK ORDERS
+Provider shall perform software engineering, cloud architecture, and artificial intelligence consulting services described in Statements of Work ("SOW") executed by both parties.
+
+2. FEES AND PAYMENT TERMS
+Customer shall pay Provider all undisputed fees within thirty (30) days following receipt of an itemized invoice. Late payments shall bear interest at 1.0% per month or the highest statutory rate.
+
+3. TERM AND TERMINATION
+(a) This Agreement commences on the Effective Date and continues for an initial term of three (3) years.
+(b) Either party may terminate this Agreement for material breach upon thirty (30) days prior written notice if such breach remains uncured.
+(c) Customer may terminate any SOW for convenience upon sixty (60) days prior written notice, subject to payment of all completed milestones.
+
+4. INTELLECTUAL PROPERTY
+Provider retains all right, title, and interest in its pre-existing tools, algorithms, and intellectual property. Customer owns all deliverables customized specifically for Customer upon full payment.
+
+5. CONFIDENTIALITY
+Each party agrees to safeguard the other party's Confidential Information with the same degree of care as its own confidential data, but not less than reasonable care.
+
+6. LIMITATION OF LIABILITY AND INDEMNIFICATION
+(a) Provider shall indemnify and defend Customer against third-party claims alleging that deliverables infringe valid patents or copyrights.
+(b) Except for indemnification obligations and breaches of confidentiality, neither party's aggregate liability under this Agreement shall exceed the total fees paid under the applicable SOW during the twelve (12) months preceding the claim.
+
+7. GOVERNING LAW AND DISPUTE RESOLUTION
+This Agreement is governed by the laws of the State of Delaware, without regard to conflicts of law. Any controversy shall be resolved through binding arbitration administered by the American Arbitration Association in New York, NY.

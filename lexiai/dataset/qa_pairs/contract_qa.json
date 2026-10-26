@@ -1,0 +1,23 @@
+[
+  {
+    "id": "QA-001",
+    "contract": "Master Services Agreement",
+    "question": "What is the limitation of liability cap under this Agreement?",
+    "answer": "Liability is capped at the total fees paid under the applicable Statement of Work during the preceding 12 months, with carve-outs for indemnification obligations and breaches of confidentiality.",
+    "evidence_clause": "Section 6(b): Limitation of Liability and Indemnification"
+  },
+  {
+    "id": "QA-002",
+    "contract": "Master Services Agreement",
+    "question": "What are the payment terms and late interest penalties?",
+    "answer": "Invoices are payable within 30 days of receipt. Late payments accrue interest at 1.0% per month or the highest statutory rate allowed by law.",
+    "evidence_clause": "Section 2: Fees and Payment Terms"
+  },
+  {
+    "id": "QA-003",
+    "contract": "Master Services Agreement",
+    "question": "How can the Customer terminate a Statement of Work for convenience?",
+    "answer": "Customer may terminate any SOW for convenience upon sixty (60) days prior written notice, subject to payment of all completed milestones.",
+    "evidence_clause": "Section 3(c): Term and Termination"
+  }
+]

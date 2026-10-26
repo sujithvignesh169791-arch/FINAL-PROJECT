@@ -1,0 +1,13 @@
+{
+  "name": "doremon-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix lexiai",
+    "dev:backend": "npm run dev:backend --prefix lexiai",
+    "dev:frontend": "npm run dev:frontend --prefix lexiai",
+    "build": "npm run build --prefix lexiai",
+    "start": "npm run start --prefix lexiai",
+    "lint": "npm run lint --prefix lexiai"
+  }
+}
