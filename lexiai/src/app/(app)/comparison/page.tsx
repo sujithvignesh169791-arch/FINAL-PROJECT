@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRightLeft, FileText, Check, X, Loader2 } from "lucide-react";
+import { ArrowRightLeft, FileText, Check, X, Loader2, Download, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { apiFetch, getAuthToken } from "@/lib/api";
 
@@ -11,6 +11,7 @@ export default function ComparisonPage() {
   const [docBId, setDocBId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [comparison, setComparison] = useState<any>(null);
+  const [exported, setExported] = useState(false);
 
   useEffect(() => {
     const fetchDocs = async () => {
@@ -69,6 +70,68 @@ export default function ComparisonPage() {
 
   const docAObj = documents.find(d => d.id === docAId);
   const docBObj = documents.find(d => d.id === docBId);
+
+  const handleExportDiffReport = async () => {
+    const timestamp = new Date().toISOString();
+    const docAName = docAObj?.filename || "Document_A";
+    const docBName = docBObj?.filename || "Document_B";
+
+    const reportContent = `================================================================================
+LEXIAI LEGAL INSTRUMENT COMPARISON & AUDIT REPORT
+Generated: ${new Date().toLocaleString()} (${timestamp})
+================================================================================
+
+AUDIT METADATA:
+- Base Instrument (Doc A): ${docAName} [ID: ${docAId}]
+- Target Instrument (Doc B): ${docBName} [ID: ${docBId}]
+- Audit System: LEXIAI Legal Analysis Engine v2.0
+
+VARIATION METRICS:
+- Clause Additions: ${comparison?.additions_count ?? 0}
+- Clause Deletions: ${comparison?.deletions_count ?? 0}
+- Material Modifications: ${comparison?.modifications_count ?? 0}
+
+--------------------------------------------------------------------------------
+BASE INSTRUMENT (DOCUMENT A) EXTRACT:
+--------------------------------------------------------------------------------
+${comparison?.text_a_sample || "No text available."}
+
+--------------------------------------------------------------------------------
+TARGET INSTRUMENT (DOCUMENT B) EXTRACT:
+--------------------------------------------------------------------------------
+${comparison?.text_b_sample || "No text available."}
+
+================================================================================
+CONFIDENTIALITY & LEGAL DISCLAIMER:
+This comparison report was generated automatically by LEXIAI for audit and legal 
+due-diligence purposes. All rights reserved.
+================================================================================`;
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(reportContent);
+      }
+    } catch (e) {
+      console.warn("Clipboard access failed:", e);
+    }
+
+    try {
+      const blob = new Blob([reportContent], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `lexiai_diff_audit_${docAName.replace(/\.[^/.]+$/, "")}_vs_${docBName.replace(/\.[^/.]+$/, "")}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Export file creation failed:", e);
+    }
+
+    setExported(true);
+    setTimeout(() => setExported(false), 3500);
+  };
 
   return (
     <div className="space-y-6 pb-10 max-w-6xl mx-auto flex flex-col">
@@ -172,12 +235,26 @@ export default function ComparisonPage() {
             <span className="text-white/70">Modifications ({comparison?.modifications_count || 0})</span>
           </div>
         </div>
-        <button 
-          onClick={() => alert("Comparison summary exported to clipboard and legal audit log.")}
-          className="text-sm bg-gold text-charcoal px-4 py-2 rounded-lg font-semibold hover:bg-gold/90 transition-colors"
-        >
-          Export Diff Report
-        </button>
+        <div className="flex items-center gap-3">
+          {exported && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-1.5 text-xs text-green-400 bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-lg"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Copied to Clipboard & Audit Log Exported</span>
+            </motion.div>
+          )}
+          <button 
+            onClick={handleExportDiffReport}
+            className="text-sm bg-gold text-charcoal px-4 py-2 rounded-lg font-semibold hover:bg-gold/90 transition-colors flex items-center gap-2 shadow-lg shadow-gold/10"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export Diff Report</span>
+          </button>
+        </div>
       </div>
     </div>
   );
