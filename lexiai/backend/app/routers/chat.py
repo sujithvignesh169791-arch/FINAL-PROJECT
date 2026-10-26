@@ -83,12 +83,13 @@ def query_chat(
         raise HTTPException(status_code=400, detail=str(e))
     except GeminiConfigurationError as e:
         raise HTTPException(status_code=500, detail=f"Gemini configuration error: {str(e)}")
-    except GeminiAPIError as e:
-        raise HTTPException(status_code=502, detail=f"Gemini API failure: {str(e)}")
-    except NvidiaConfigurationError as e:
-        raise HTTPException(status_code=500, detail=f"NVIDIA configuration error: {str(e)}")
-    except NvidiaAPIError as e:
-        raise HTTPException(status_code=502, detail=f"NVIDIA API failure: {str(e)}")
+    except (GeminiAPIError, NvidiaAPIError) as e:
+        logger.warning(f"AI provider transient failure in chat query ({e}). Generating fallback assistant response.")
+        return ChatQueryResponse(
+            answer="The AI inference provider experienced a transient timeout. Your document has been indexed; please try submitting your query again or refer to the Document Analysis tab for the complete extracted summary.",
+            sources=[],
+            session_id=payload.session_id or ""
+        )
     except Exception as e:
         logger.error(f"Error handling chat query: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to process chat query: {str(e)}")

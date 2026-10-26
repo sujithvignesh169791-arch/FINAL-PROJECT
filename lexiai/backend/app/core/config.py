@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
     NVIDIA_API_KEY: str = ""
     NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
-    NVIDIA_MODEL: str = "minimaxai/minimax-m3.1-flash"
+    NVIDIA_MODEL: str = "nvidia/nemotron-3.5-bolt-e4b"
     NVIDIA_EMBEDDING_MODEL: str = "nvidia/nemotron-3-embed-1b"
     AI_PROVIDER: str = "nvidia"  # "gemini", "nvidia", or "auto"
     CHROMA_PERSIST_DIR: str = str(BACKEND_DIR / "chroma_db")

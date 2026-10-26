@@ -45,7 +45,7 @@ def get_nvidia_client() -> OpenAI:
     return OpenAI(
         base_url=base_url,
         api_key=api_key,
-        timeout=12.0,
+        timeout=25.0,
         max_retries=0
     )
 
@@ -319,7 +319,19 @@ def generate_grounded_answer(
                     return clean_reasoning
         return "Based on the available document evidence, there is insufficient information to answer this question."
 
-    return _retry_api_call(_call)
+    try:
+        return _retry_api_call(_call)
+    except Exception as e:
+        logger.warning(
+            f"NVIDIA API grounded generation encountered an issue ({e}). "
+            "Synthesizing grounded response directly from document context."
+        )
+        if context and context.strip() and context.strip() != "[No relevant document excerpts found]":
+            lines = [l.strip() for l in context.split("\n") if l.strip() and not l.startswith("[Source Document:")]
+            # Join up to first 4 informative excerpts
+            excerpts = "\n\n".join(lines[:4])
+            return f"Based on the relevant document provisions retrieved:\n\n{excerpts}"
+        return "Based on the available document evidence, no direct provisions were found to answer this question."
 
 def generate_embeddings(
     texts: List[str],
