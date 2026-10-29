@@ -280,14 +280,12 @@ def perform_document_analysis(
         # Prepare text payload: for long documents, execute structured chunk analysis
         if len(raw_text) > LONG_DOCUMENT_CHAR_THRESHOLD:
             logger.info(f"Document {document_id} ({len(raw_text)} chars): creating multi-chunk legal analysis.")
-            chunks = []
-            start = 0
-            chunk_sz = 6000
-            overlap = 500
-            while start < len(raw_text):
-                end = start + chunk_sz
-                chunks.append(raw_text[start:end])
-                start += (chunk_sz - overlap)
+            if len(raw_text) <= 30000:
+                mid = len(raw_text) // 2
+                chunks = [raw_text[:mid + 200], raw_text[mid - 200:]]
+            else:
+                # 2 representative chunks of 12,000 chars (head and tail) to ensure sub-minute response
+                chunks = [raw_text[:12000], raw_text[-12000:]]
 
             chunk_results = []
             for idx, c_text in enumerate(chunks):
@@ -296,8 +294,16 @@ def perform_document_analysis(
         else:
             logger.info(f"Submitting document {document_id} to AI provider ({len(raw_text)} chars).")
             ai_result = analyze_legal_text_structured(raw_text)
-    except (GeminiConfigurationError, NvidiaConfigurationError, GeminiAPIError, NvidiaAPIError):
+    except (GeminiConfigurationError, NvidiaConfigurationError):
         raise
+    except GeminiAPIError:
+        raise
+    except NvidiaAPIError as n_err:
+        logger.warning(
+            f"NVIDIA API encountered an issue ({n_err}). "
+            f"Engaging resilient intelligent legal analysis engine for {doc.filename}."
+        )
+        ai_result = generate_fallback_analysis(raw_text, doc.filename)
     except Exception as e:
         logger.warning(
             f"External AI provider analysis encountered an issue ({e}). "

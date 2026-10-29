@@ -164,3 +164,32 @@ def test_generate_embeddings_mocked():
         assert len(embeddings[0]) == 2048
         assert embeddings[0][0] == 0.05
 
+def test_extract_and_validate_json_missing_comma_repair():
+    # Malformed JSON with missing comma between list items and missing comma after object field
+    malformed_raw = """
+    {
+        "executive_summary": "Extracted judgment with syntax defect"
+        "parties": ["Petitioner" "Respondent"],
+        "important_points": [
+            "Point 1"
+            "Point 2"
+        ],
+        "clauses": [
+            {
+                "clause_type": "Precedent",
+                "title": "Ruling",
+                "text": "The High Court dismissed the application."
+            }
+        ],
+        "risk_score": 82.0,
+    }
+    """
+    result = _extract_and_validate_json(malformed_raw)
+    assert isinstance(result, LegalAnalysisResult)
+    assert result.executive_summary == "Extracted judgment with syntax defect"
+    assert len(result.parties) == 2
+    assert len(result.important_points) == 2
+    assert len(result.clauses) == 1
+    assert result.risk_score == 82.0
+
+

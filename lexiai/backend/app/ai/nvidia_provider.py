@@ -45,7 +45,7 @@ def get_nvidia_client() -> OpenAI:
     return OpenAI(
         base_url=base_url,
         api_key=api_key,
-        timeout=55.0,
+        timeout=90.0,
         max_retries=0
     )
 
@@ -87,7 +87,7 @@ def _retry_api_call(func, max_retries: int = 1, initial_delay: float = 1.0):
 def _extract_and_validate_json(raw_text: str) -> LegalAnalysisResult:
     """
     Cleans markdown formatting and parses raw model output into a validated LegalAnalysisResult.
-    Handles ```json code fences, <think> tags, and outermost JSON brackets.
+    Handles ```json code fences, <think> tags, missing commas, unescaped quotes, and outermost JSON brackets.
     """
     if not raw_text or not raw_text.strip():
         raise NvidiaAPIError("Empty response received from NVIDIA model.")
@@ -109,25 +109,62 @@ def _extract_and_validate_json(raw_text: str) -> LegalAnalysisResult:
         if match:
             clean_text = match.group(1).strip()
 
+    parsed = None
     try:
         parsed = json.loads(clean_text)
-        return LegalAnalysisResult.model_validate(parsed)
     except json.JSONDecodeError as jde:
-        # Fallback: slice from first '{' to last '}'
-        first_brace = clean_text.find("{")
-        last_brace = clean_text.rfind("}")
-        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
-            try:
+        # Fallback 1: json_repair for missing commas, trailing commas, unescaped quotes
+        try:
+            from json_repair import loads as repair_loads, repair_json
+            repaired_obj = repair_loads(clean_text)
+            if isinstance(repaired_obj, dict):
+                parsed = repaired_obj
+            elif isinstance(repaired_obj, str):
+                parsed = json.loads(repair_json(clean_text))
+        except Exception as r_err:
+            logger.warning(f"json_repair direct decode failed: {r_err}")
+
+        # Fallback 2: slice from first '{' to last '}'
+        if not parsed or not isinstance(parsed, dict):
+            first_brace = clean_text.find("{")
+            last_brace = clean_text.rfind("}")
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
                 candidate = clean_text[first_brace:last_brace + 1]
-                parsed = json.loads(candidate)
-                return LegalAnalysisResult.model_validate(parsed)
-            except Exception:
-                pass
-        logger.error(f"Failed to parse JSON from NVIDIA response: {jde}. Raw snippet: {clean_text[:200]}")
-        raise NvidiaAPIError(f"Malformed JSON received from NVIDIA model: {jde}") from jde
+                try:
+                    parsed = json.loads(candidate)
+                except Exception:
+                    try:
+                        from json_repair import loads as repair_loads
+                        candidate_repaired = repair_loads(candidate)
+                        if isinstance(candidate_repaired, dict):
+                            parsed = candidate_repaired
+                    except Exception:
+                        pass
+
+    if not parsed or not isinstance(parsed, dict):
+        logger.error(f"Failed to parse JSON from NVIDIA response. Raw snippet: {clean_text[:200]}")
+        raise NvidiaAPIError("Malformed JSON received from NVIDIA model: Could not decode valid JSON object.")
+
+    try:
+        return LegalAnalysisResult.model_validate(parsed)
     except Exception as ve:
-        logger.error(f"Pydantic validation error for NVIDIA response: {ve}")
-        raise NvidiaAPIError(f"Schema validation failed on NVIDIA output: {ve}") from ve
+        logger.warning(f"Pydantic validation warning on NVIDIA output: {ve}. Reconciling schema...")
+        try:
+            raw_clauses = parsed.get("clauses", [])
+            valid_clauses = []
+            if isinstance(raw_clauses, list):
+                for c in raw_clauses:
+                    if isinstance(c, dict) and c.get("text"):
+                        valid_clauses.append({
+                            "clause_type": str(c.get("clause_type") or "General Provision"),
+                            "title": str(c.get("title") or "Clause"),
+                            "text": str(c.get("text") or ""),
+                            "source_page": c.get("source_page")
+                        })
+            parsed["clauses"] = valid_clauses
+            return LegalAnalysisResult.model_validate(parsed)
+        except Exception:
+            raise NvidiaAPIError(f"Schema validation failed on NVIDIA output: {ve}") from ve
 
 def analyze_legal_text_structured(
     text: str,
@@ -160,7 +197,7 @@ def analyze_legal_text_structured(
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.1,
-            max_tokens=4096
+            max_tokens=3072
         )
         msg = response.choices[0].message
         content = (msg.content or "").strip()
@@ -209,7 +246,7 @@ def analyze_chunk_structured(
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.1,
-            max_tokens=4096
+            max_tokens=2048
         )
         msg = response.choices[0].message
         content = (msg.content or "").strip()
@@ -258,7 +295,7 @@ def combine_chunk_analyses_structured(
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.1,
-            max_tokens=4096
+            max_tokens=3072
         )
         msg = response.choices[0].message
         content = (msg.content or "").strip()

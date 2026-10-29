@@ -98,3 +98,4 @@ def test_high_court_endpoints_authorized():
     types = types_resp.json()
     assert len(types) == 5
     assert all("Allahabad" in t["court_name"] for t in types)
+

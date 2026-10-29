@@ -217,3 +217,4 @@ def get_high_court_service() -> HighCourtMetadataService:
         _high_court_service = HighCourtMetadataService()
         _high_court_service.load()
     return _high_court_service
+
