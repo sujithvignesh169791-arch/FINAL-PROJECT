@@ -93,8 +93,8 @@ export default function AnalysisPage() {
 
         setDocuments(docs);
 
-        // Check if docId is provided in URL query params
-        let targetId = docs[docs.length - 1].id;
+        // Default to newest document (index 0) or query param docId
+        let targetId = docs[0].id;
         if (typeof window !== "undefined") {
           const urlParams = new URLSearchParams(window.location.search);
           const paramId = urlParams.get("docId");
@@ -178,17 +178,28 @@ export default function AnalysisPage() {
         data = await analysisRes.json().catch(() => null);
       }
 
-      // If backend reports analysis actively running in another thread (409 or 425), wait briefly
-      if (analysisRes.status === 409 || analysisRes.status === 425) {
-        await new Promise(r => setTimeout(r, 2000));
+      // If backend reports analysis actively running in another thread (409 or 425), poll until ready
+      let pollCount = 0;
+      while ((analysisRes.status === 409 || analysisRes.status === 425) && pollCount < 10) {
+        setSummaryData(prev => ({
+          ...prev,
+          summaryText: `Analysis in progress for ${docName}... (checking status)`
+        }));
+        await new Promise(r => setTimeout(r, 1500));
+        pollCount++;
         analysisRes = await apiFetch(`/api/v1/documents/${docId}/analysis`);
         if (analysisRes.ok) {
           data = await analysisRes.json().catch(() => null);
+          if (data && data.summary) break;
         }
       }
 
       // If no analysis exists yet or summary is missing, trigger analyze endpoint once
       if (!data || !data.summary) {
+        setSummaryData(prev => ({
+          ...prev,
+          summaryText: `Extracting clauses & risk profile for ${docName}...`
+        }));
         const analyzeTrigger = await apiFetch(`/api/v1/documents/${docId}/analyze`, {
           method: "POST"
         });
@@ -357,6 +368,11 @@ export default function AnalysisPage() {
 
   const handleDocumentChange = (docId: string) => {
     setSelectedDocId(docId);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("docId", docId);
+      window.history.replaceState({}, "", url.toString());
+    }
     loadAnalysis(docId, documents);
   };
 
@@ -374,13 +390,17 @@ export default function AnalysisPage() {
             <select
               value={selectedDocId}
               onChange={(e) => handleDocumentChange(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-charcoal/80 border border-white/10 text-ivory text-sm focus:outline-none focus:ring-1 focus:ring-gold"
+              className="px-3 py-2 rounded-lg bg-charcoal/80 border border-white/10 text-ivory text-sm focus:outline-none focus:ring-1 focus:ring-gold max-w-[280px] truncate"
             >
-              {documents.map((d) => (
-                <option key={d.id} value={d.id} className="bg-charcoal text-ivory">
-                  {d.filename}
-                </option>
-              ))}
+              {documents.map((d) => {
+                const dateStr = d.created_at ? new Date(d.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+                const label = dateStr ? `${d.filename} (${dateStr})` : d.filename;
+                return (
+                  <option key={d.id} value={d.id} className="bg-charcoal text-ivory">
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           )}
 
@@ -393,7 +413,7 @@ export default function AnalysisPage() {
             Re-Analyze
           </button>
 
-          <Link href="/ask">
+          <Link href={selectedDocId ? `/ask?docId=${selectedDocId}` : "/ask"}>
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gold text-charcoal border border-gold hover:bg-gold/90 transition-colors text-sm font-semibold">
               Ask Document
               <ExternalLink className="w-3.5 h-3.5" />
@@ -432,7 +452,10 @@ export default function AnalysisPage() {
       {loading && (
         <div className="p-12 glass rounded-xl border border-white/5 flex flex-col items-center justify-center space-y-4">
           <Loader2 className="w-8 h-8 text-gold animate-spin" />
-          <p className="text-sm text-white/60">Analyzing clauses, liabilities, and legal obligations with AI Engine...</p>
+          <p className="text-sm text-white/80 font-medium">
+            {summaryData.summaryText || "Analyzing clauses, liabilities, and legal obligations with AI Engine..."}
+          </p>
+          <p className="text-xs text-white/40">Synthesizing risk profile, contractual terms, and statutory references...</p>
         </div>
       )}
 

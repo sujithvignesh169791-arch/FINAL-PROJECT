@@ -7,6 +7,7 @@ class DocumentResponse(BaseModel):
     filename: str
     file_type: str
     upload_status: str
+    file_size: Optional[int] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 

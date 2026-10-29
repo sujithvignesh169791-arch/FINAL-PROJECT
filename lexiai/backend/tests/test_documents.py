@@ -39,8 +39,6 @@ def test_document_upload_txt():
     job_response = client.get(f"/api/v1/documents/jobs/{doc_id}", headers=headers)
     assert job_response.status_code == 200
     
-    # Give background task time to run? In TestClient, background tasks run after returning response.
-    # But for async we might need to await. Actually TestClient executes background tasks synchronously before returning!
     job_response = client.get(f"/api/v1/documents/jobs/{doc_id}", headers=headers)
     assert job_response.json()["status"] in ["processing", "completed"]
 
@@ -71,7 +69,11 @@ def test_document_upload_docx():
         job_response = client.get(f"/api/v1/documents/jobs/{doc_id}", headers=headers)
         assert job_response.status_code == 200
         assert job_response.json()["status"] == "completed"
+
+        # Test download endpoint
+        dl_res = client.get(f"/api/v1/documents/{doc_id}/download", headers=headers)
+        assert dl_res.status_code == 200
+        assert len(dl_res.content) > 0
     finally:
         if os.path.exists("test_agreement.docx"):
             os.remove("test_agreement.docx")
-

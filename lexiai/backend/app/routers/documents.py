@@ -4,6 +4,7 @@ import threading
 import time
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
@@ -14,6 +15,7 @@ from app.ai.legal_analysis import perform_document_analysis
 from app.models.analysis import DocumentAnalysis
 from app.services.auth_service import get_current_user
 from app.services.document_service import process_document
+from app.ai.rag_service import delete_document_chunks
 from app.ai.gemini_provider import GeminiConfigurationError, GeminiAPIError
 from app.ai.nvidia_provider import NvidiaConfigurationError, NvidiaAPIError
 
@@ -76,11 +78,18 @@ async def upload_document(
     db.refresh(db_doc)
     
     background_tasks.add_task(process_document, db_doc.id)
+    db_doc.file_size = len(file_content)
     return db_doc
 
 @router.get("", response_model=list[DocumentResponse])
 def get_documents(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    docs = db.query(Document).filter(Document.user_id == current_user.id).order_by(Document.created_at.asc()).all()
+    docs = db.query(Document).filter(Document.user_id == current_user.id).order_by(Document.created_at.desc()).all()
+    for d in docs:
+        if d.storage_url and os.path.exists(d.storage_url):
+            try:
+                d.file_size = os.path.getsize(d.storage_url)
+            except Exception:
+                d.file_size = None
     return docs
 
 @router.get("/{document_id}", response_model=DocumentResponse)
@@ -88,7 +97,31 @@ def get_document(document_id: str, current_user: User = Depends(get_current_user
     doc = db.query(Document).filter(Document.id == document_id, Document.user_id == current_user.id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    if doc.storage_url and os.path.exists(doc.storage_url):
+        try:
+            doc.file_size = os.path.getsize(doc.storage_url)
+        except Exception:
+            doc.file_size = None
     return doc
+
+@router.get("/{document_id}/download")
+def download_document(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    doc = db.query(Document).filter(Document.id == document_id, Document.user_id == current_user.id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found or unauthorized")
+
+    if not doc.storage_url or not os.path.exists(doc.storage_url):
+        raise HTTPException(status_code=404, detail="Original document file not found on server")
+
+    return FileResponse(
+        path=doc.storage_url,
+        filename=doc.filename,
+        media_type="application/octet-stream"
+    )
 
 @router.get("/jobs/{job_id}", response_model=DocumentJobResponse)
 def get_document_job(job_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -215,7 +248,20 @@ def delete_document(document_id: str, current_user: User = Depends(get_current_u
     doc = db.query(Document).filter(Document.id == document_id, Document.user_id == current_user.id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found or unauthorized")
-    
+
+    # Clean up uploaded file on disk
+    if doc.storage_url and os.path.exists(doc.storage_url):
+        try:
+            os.remove(doc.storage_url)
+        except Exception:
+            pass
+
+    # Clean up vector database chunks
+    try:
+        delete_document_chunks(document_id)
+    except Exception:
+        pass
+
     db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id == document_id).delete()
     db.delete(doc)
     db.commit()
