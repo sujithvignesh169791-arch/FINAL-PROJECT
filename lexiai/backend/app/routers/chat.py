@@ -59,7 +59,8 @@ def query_chat(
             user_id=current_user.id,
             question=payload.question.strip(),
             document_id=payload.document_id,
-            session_id=payload.session_id
+            session_id=payload.session_id,
+            include_public_corpus=payload.include_public_corpus
         )
 
         source_items = [

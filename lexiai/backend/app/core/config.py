@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     NVIDIA_EMBEDDING_MODEL: str = "nvidia/nemotron-3-embed-1b"
     AI_PROVIDER: str = "nvidia"  # "gemini", "nvidia", or "auto"
     CHROMA_PERSIST_DIR: str = str(BACKEND_DIR / "chroma_db")
+    DATASET_ROOT_PATH: str = r"C:\Users\SK\Desktop\datasets"
+    PUBLIC_CORPUS_COLLECTION_PREFIX: str = "lexiai_public_corpus"
+    USER_DOCUMENTS_COLLECTION_PREFIX: str = "lexiai_documents"
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
     TOP_K_CHUNKS: int = 4
@@ -34,4 +37,3 @@ settings = Settings()
 if settings.DATABASE_URL.startswith("sqlite:///./"):
     rel_name = settings.DATABASE_URL.replace("sqlite:///./", "")
     settings.DATABASE_URL = f"sqlite:///{BACKEND_DIR / rel_name}"
-

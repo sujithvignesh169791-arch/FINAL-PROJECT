@@ -13,6 +13,7 @@ class ChatQueryRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User legal query")
     document_id: Optional[str] = Field(default=None, description="Optional document ID to restrict search")
     session_id: Optional[str] = Field(default=None, description="Optional chat session ID for multi-turn history")
+    include_public_corpus: bool = Field(default=False, description="Whether to include public legal research corpus in retrieval")
 
 class ChatQueryResponse(BaseModel):
     answer: str

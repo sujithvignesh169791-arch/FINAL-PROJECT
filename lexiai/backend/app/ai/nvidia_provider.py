@@ -45,7 +45,7 @@ def get_nvidia_client() -> OpenAI:
     return OpenAI(
         base_url=base_url,
         api_key=api_key,
-        timeout=25.0,
+        timeout=55.0,
         max_retries=0
     )
 

@@ -120,10 +120,22 @@ export default function CaseRecommendationPage() {
                       </div>
                       <div>
                         <h4 className="text-lg font-medium text-ivory group-hover:text-gold transition-colors">{precedent.name}</h4>
-                        <div className="flex items-center gap-3 text-xs text-white/40 mt-1 mb-2">
+                        <div className="flex items-center gap-3 text-xs text-white/40 mt-1 mb-2 flex-wrap">
                           <span className="flex items-center gap-1"><Scale className="w-3 h-3" /> {precedent.court}</span>
                           <span>&bull;</span>
                           <span>{precedent.year}</span>
+                          {precedent.citation && (
+                            <>
+                              <span>&bull;</span>
+                              <span className="text-gold/90 font-mono text-[11px] bg-gold/10 px-2 py-0.5 rounded border border-gold/20">{precedent.citation}</span>
+                            </>
+                          )}
+                          {precedent.filename && (
+                            <>
+                              <span>&bull;</span>
+                              <span className="text-white/30 text-[11px] truncate max-w-xs">{precedent.filename}</span>
+                            </>
+                          )}
                         </div>
                         <p className="text-sm text-white/60">{precedent.desc}</p>
                       </div>

@@ -12,7 +12,7 @@ import {
   RefreshCw,
   ExternalLink
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { apiFetch, getAuthToken } from "@/lib/api";
 
@@ -49,6 +49,7 @@ export default function AnalysisPage() {
   const [error, setError] = useState<string | null>(null);
   const [documents, setDocuments] = useState<any[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string>("");
+  const inFlightDocId = useRef<string | null>(null);
 
   // Load document list and determine active document
   useEffect(() => {
@@ -117,7 +118,11 @@ export default function AnalysisPage() {
     };
   }, []);
 
-  const loadAnalysis = async (docId: string, currentDocs: any[] = documents) => {
+  const loadAnalysis = async (docId: string, currentDocs: any[] = documents, forceRetry: boolean = false) => {
+    if (!docId) return;
+    if (inFlightDocId.current === docId && !forceRetry) return;
+    inFlightDocId.current = docId;
+
     setLoading(true);
     setError(null);
 
@@ -127,20 +132,63 @@ export default function AnalysisPage() {
     setSummaryData(prev => ({
       ...prev,
       docName,
-      summaryText: `Analyzing ${docName} with AI Engine...`
+      summaryText: `Checking analysis status for ${docName}...`
     }));
 
     try {
-      // 1. First attempt to fetch existing analysis
+      // 1. If document upload extraction is still in progress, poll until ready
+      if (docObj && docObj.upload_status === "processing") {
+        setSummaryData(prev => ({
+          ...prev,
+          summaryText: `Extracting text from ${docName}...`
+        }));
+        
+        let attempts = 0;
+        let isDone = false;
+        while (attempts < 20 && !isDone) {
+          await new Promise(r => setTimeout(r, 1500));
+          attempts++;
+          try {
+            const jobRes = await apiFetch(`/api/v1/documents/jobs/${docId}`);
+            if (jobRes.ok) {
+              const jobData = await jobRes.json();
+              if (jobData.status === "completed") {
+                isDone = true;
+                break;
+              } else if (jobData.status === "failed") {
+                throw new Error(jobData.message || "Document text extraction failed.");
+              }
+            }
+          } catch (jobErr: any) {
+            if (jobErr.message && jobErr.message.includes("failed")) throw jobErr;
+          }
+        }
+      }
+
+      setSummaryData(prev => ({
+        ...prev,
+        summaryText: `Analyzing ${docName} with AI Engine...`
+      }));
+
+      // 2. Fetch analysis record
       let analysisRes = await apiFetch(`/api/v1/documents/${docId}/analysis`);
-      
       let data: any = null;
+
       if (analysisRes.ok) {
         data = await analysisRes.json().catch(() => null);
       }
 
-      // If no analysis exists yet or analysis summary is empty, trigger analyze
-      if (!analysisRes.ok || analysisRes.status === 404 || !data || !data.summary) {
+      // If backend reports analysis actively running in another thread (409 or 425), wait briefly
+      if (analysisRes.status === 409 || analysisRes.status === 425) {
+        await new Promise(r => setTimeout(r, 2000));
+        analysisRes = await apiFetch(`/api/v1/documents/${docId}/analysis`);
+        if (analysisRes.ok) {
+          data = await analysisRes.json().catch(() => null);
+        }
+      }
+
+      // If no analysis exists yet or summary is missing, trigger analyze endpoint once
+      if (!data || !data.summary) {
         const analyzeTrigger = await apiFetch(`/api/v1/documents/${docId}/analyze`, {
           method: "POST"
         });
@@ -154,8 +202,8 @@ export default function AnalysisPage() {
         data = await analyzeTrigger.json();
       }
 
-      if (!data) {
-        throw new Error("Unable to retrieve document analysis.");
+      if (!data || !data.summary) {
+        throw new Error("Unable to retrieve complete legal analysis.");
       }
 
       parseAndSetAnalysis(data, docName);
@@ -167,6 +215,7 @@ export default function AnalysisPage() {
         summaryText: "Analysis could not be generated."
       }));
     } finally {
+      inFlightDocId.current = null;
       setLoading(false);
     }
   };
@@ -359,15 +408,24 @@ export default function AnalysisPage() {
             <AlertTriangle className="w-5 h-5 text-burgundy shrink-0" />
             <span className="text-sm">{error}</span>
           </div>
-          {error.toLowerCase().includes("sign in") || error.toLowerCase().includes("session") || error.toLowerCase().includes("credential") ? (
-            <Link href="/login" className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-gold text-charcoal hover:bg-gold/90 transition-colors">
-              Sign In
-            </Link>
-          ) : (
-            <Link href="/upload" className="text-xs font-semibold text-gold underline hover:text-gold/80">
-              Upload New Document
-            </Link>
-          )}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => selectedDocId && loadAnalysis(selectedDocId, documents, true)}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-ivory transition-colors flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Retry
+            </button>
+            {error.toLowerCase().includes("sign in") || error.toLowerCase().includes("session") || error.toLowerCase().includes("credential") ? (
+              <Link href="/login" className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-gold text-charcoal hover:bg-gold/90 transition-colors">
+                Sign In
+              </Link>
+            ) : (
+              <Link href="/upload" className="text-xs font-semibold text-gold underline hover:text-gold/80">
+                Upload New Document
+              </Link>
+            )}
+          </div>
         </div>
       )}
 

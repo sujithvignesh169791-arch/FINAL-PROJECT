@@ -277,16 +277,27 @@ def perform_document_analysis(
     # 4. Attempt AI Model Analysis with Fast Intelligent Digest & Fallback
     ai_result: Optional[LegalAnalysisResult] = None
     try:
-        # Prepare text payload: for long documents, extract a substantive digest to prevent timeout
+        # Prepare text payload: for long documents, execute structured chunk analysis
         if len(raw_text) > LONG_DOCUMENT_CHAR_THRESHOLD:
-            logger.info(f"Document {document_id} ({len(raw_text)} chars): creating focused legal digest.")
-            # Head (first 8000 chars) + Tail (last 4000 chars) contains 95% of operative terms
-            payload_text = raw_text[:8000] + "\n\n[...]\n\n" + raw_text[-4000:]
-        else:
-            payload_text = raw_text
+            logger.info(f"Document {document_id} ({len(raw_text)} chars): creating multi-chunk legal analysis.")
+            chunks = []
+            start = 0
+            chunk_sz = 6000
+            overlap = 500
+            while start < len(raw_text):
+                end = start + chunk_sz
+                chunks.append(raw_text[start:end])
+                start += (chunk_sz - overlap)
 
-        logger.info(f"Submitting document {document_id} to AI provider ({len(payload_text)} chars).")
-        ai_result = analyze_legal_text_structured(payload_text)
+            chunk_results = []
+            for idx, c_text in enumerate(chunks):
+                chunk_results.append(analyze_chunk_structured(c_text, idx + 1, len(chunks)))
+            ai_result = combine_chunk_analyses_structured(chunk_results)
+        else:
+            logger.info(f"Submitting document {document_id} to AI provider ({len(raw_text)} chars).")
+            ai_result = analyze_legal_text_structured(raw_text)
+    except (GeminiConfigurationError, NvidiaConfigurationError, GeminiAPIError, NvidiaAPIError):
+        raise
     except Exception as e:
         logger.warning(
             f"External AI provider analysis encountered an issue ({e}). "

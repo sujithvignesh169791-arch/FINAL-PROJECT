@@ -1,5 +1,7 @@
 import os
 import uuid
+import threading
+import time
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -21,6 +23,10 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 UPLOAD_DIR = str(BACKEND_DIR / "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# In-memory concurrency tracking to prevent duplicate concurrent analyses
+_analyzing_documents: set[str] = set()
+_analyzing_lock = threading.Lock()
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 ALLOWED_MIME_TYPES = {
@@ -45,14 +51,12 @@ async def upload_document(
         raise HTTPException(status_code=400, detail=f"Unsupported file extension: {ext}. Allowed: PDF, DOCX, TXT")
 
     if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
-        # If extension is valid, allow it even if browser sends an unusual MIME
         pass
 
     file_content = await file.read()
     if len(file_content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File too large (Max 50MB)")
         
-    # Generate safe filename and save
     file_uuid = str(uuid.uuid4())
     safe_filename = f"{file_uuid}{ext}"
     file_path = os.path.join(UPLOAD_DIR, safe_filename)
@@ -60,7 +64,6 @@ async def upload_document(
     with open(file_path, "wb") as f:
         f.write(file_content)
         
-    # Create DB record
     db_doc = Document(
         user_id=current_user.id,
         filename=file.filename or "uploaded_document",
@@ -72,9 +75,7 @@ async def upload_document(
     db.commit()
     db.refresh(db_doc)
     
-    # Run processing in background with document ID (creates its own DB session)
     background_tasks.add_task(process_document, db_doc.id)
-    
     return db_doc
 
 @router.get("", response_model=list[DocumentResponse])
@@ -114,12 +115,25 @@ def analyze_document(document_id: str, current_user: User = Depends(get_current_
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found or unauthorized")
     
-    # If document processing is still pending, process it synchronously now
-    if doc.upload_status != "completed":
-        process_document(db, document_id)
-        db.refresh(doc)
-        
+    # Concurrency check: avoid duplicate parallel analyses for the same document
+    with _analyzing_lock:
+        if document_id in _analyzing_documents:
+            # Wait briefly for in-flight analysis to finish rather than duplicating
+            for _ in range(20):
+                time.sleep(0.5)
+                db.refresh(doc)
+                existing = db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id == document_id).first()
+                if existing and existing.summary:
+                    return existing
+                if document_id not in _analyzing_documents:
+                    break
+        _analyzing_documents.add(document_id)
+
     try:
+        if doc.upload_status != "completed":
+            process_document(db, document_id)
+            db.refresh(doc)
+            
         analysis = perform_document_analysis(db, document_id, current_user.id)
         return analysis
     except ValueError as e:
@@ -134,6 +148,9 @@ def analyze_document(document_id: str, current_user: User = Depends(get_current_
         raise HTTPException(status_code=502, detail=f"NVIDIA API failure: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+    finally:
+        with _analyzing_lock:
+            _analyzing_documents.discard(document_id)
 
 @router.get("/{document_id}/analysis", response_model=AnalysisResponse)
 def get_analysis(document_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -142,23 +159,56 @@ def get_analysis(document_id: str, current_user: User = Depends(get_current_user
         raise HTTPException(status_code=404, detail="Document not found or unauthorized")
         
     analysis = db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id == document_id).first()
-    if not analysis or not analysis.summary:
-        try:
-            analysis = perform_document_analysis(db, document_id, current_user.id)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        except GeminiConfigurationError as e:
-            raise HTTPException(status_code=500, detail=f"Gemini configuration error: {str(e)}")
-        except GeminiAPIError as e:
-            raise HTTPException(status_code=502, detail=f"Gemini API failure: {str(e)}")
-        except NvidiaConfigurationError as e:
-            raise HTTPException(status_code=500, detail=f"NVIDIA configuration error: {str(e)}")
-        except NvidiaAPIError as e:
-            raise HTTPException(status_code=502, detail=f"NVIDIA API failure: {str(e)}")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Analysis retrieval failed: {str(e)}")
-        
-    return analysis
+    
+    # Return persisted analysis immediately if ready
+    if analysis and analysis.summary:
+        return analysis
+
+    # If document upload/text extraction failed, report error
+    if doc.upload_status == "failed":
+        err_msg = analysis.processing_error if analysis else "Document processing failed."
+        raise HTTPException(status_code=400, detail=f"Text extraction failed: {err_msg}")
+
+    # Prevent concurrent duplicate requests from running parallel analyses
+    with _analyzing_lock:
+        if document_id in _analyzing_documents:
+            # Another request is actively generating analysis, wait briefly or return existing
+            for _ in range(15):
+                time.sleep(0.5)
+                existing = db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id == document_id).first()
+                if existing and existing.summary:
+                    return existing
+                if document_id not in _analyzing_documents:
+                    break
+            existing = db.query(DocumentAnalysis).filter(DocumentAnalysis.document_id == document_id).first()
+            if existing and existing.summary:
+                return existing
+            raise HTTPException(status_code=409, detail="Analysis is already actively running for this document.")
+        _analyzing_documents.add(document_id)
+
+    try:
+        # If document text extraction hasn't completed yet, run extraction first
+        if doc.upload_status != "completed":
+            process_document(db, document_id)
+            db.refresh(doc)
+
+        analysis = perform_document_analysis(db, document_id, current_user.id)
+        return analysis
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except GeminiConfigurationError as e:
+        raise HTTPException(status_code=500, detail=f"Gemini configuration error: {str(e)}")
+    except GeminiAPIError as e:
+        raise HTTPException(status_code=502, detail=f"Gemini API failure: {str(e)}")
+    except NvidiaConfigurationError as e:
+        raise HTTPException(status_code=500, detail=f"NVIDIA configuration error: {str(e)}")
+    except NvidiaAPIError as e:
+        raise HTTPException(status_code=502, detail=f"NVIDIA API failure: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis retrieval failed: {str(e)}")
+    finally:
+        with _analyzing_lock:
+            _analyzing_documents.discard(document_id)
 
 @router.delete("/{document_id}")
 def delete_document(document_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
